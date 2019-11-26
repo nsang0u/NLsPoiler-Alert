@@ -11,3 +11,31 @@ library(jsonlite)
 IMDB_movie_details <- stream_in(file("IMDB_movie_details.json"))
 IMDB_reviews <- stream_in(file("IMDB_reviews.json"))
 ```
+
+
+```{r}
+head(IMDB_movie_details)
+head(IMDB_reviews)
+```
+
+
+### 2-c. Frequency
+
+
+```{r echo = F}
+library(dplyr)
+library(tidytext)
+
+test = IMDB_reviews
+
+movie_words = test %>% unnest_tokens(word, input = review_summary) %>% count(movie_id, word, sort = T)
+
+movie_words
+
+total_words = movie_words %>% group_by(movie_id) %>% summarize(total = sum(n))
+
+movie_words = left_join(book_words, total_words)
+movie_words
+```
+
+
