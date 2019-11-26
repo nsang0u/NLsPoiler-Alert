@@ -1,0 +1,13 @@
+---
+title: "ProjectMain"
+author: "Noah Nsangou"
+date: "11/25/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(jsonlite)
+IMDB_movie_details <- stream_in(file("IMDB_movie_details.json"))
+IMDB_reviews <- stream_in(file("IMDB_reviews.json"))
+```
