@@ -19,6 +19,15 @@ head(IMDB_reviews)
 ```
 
 
+
+### Review Length
+```{r}
+review_length <- nchar(IMDB_reviews$review_text)
+```
+
+
+
+
 ### 2-c. Frequency
 
 
