@@ -111,6 +111,3 @@ testSummary_split <- mySplit(testMovie$plot_summary)
 
 View(amatch(testSynopsis_split, testSummary_split, method = "lv", maxDist = 1))
 ```
-
-
-
