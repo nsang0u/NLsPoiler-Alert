@@ -20,19 +20,201 @@ head(IMDB_movie_details)
 head(IMDB_reviews)
 ```
 
+### Data Grooming
+
+## Size reduction
+```{r}
+lite_movie_details <- na.omit(IMDB_movie_details[IMDB_movie_details$plot_synopsis != "",])[1:400,]
+lite_movie_df <- merge(x = IMDB_reviews, y = lite_movie_details, by = "movie_id")
+
+```
+
+
+
+### PREDICTORS:
+
+## Review Length
+```{r}
+review_length <- length(mySplit(IMDB_reviews$review_text))
+```
+
+## Rating
+```{r}
+lite_movie_details$rating <- as.double(lite_movie_details$rating)
+lite_movie_df$rating.y <- as.double(lite_movie_df$rating.y)
+lite_movie_df$rating.x <- as.double(lite_movie_df$rating.x)
+```
+
+## Mean Rating 
+
+```{r}
+temp_std = lite_movie_df %>% select(movie_id, rating.x) %>% group_by(movie_id) %>% summarise(std_rating = sd(rating.x))
+
+lite_movie_df <- merge(x = lite_movie_df, y = temp_std, by = "movie_id", all.x = T)
+lite_movie_df$z_score = 0
+lite_movie_df$z_score = (lite_movie_df$rating.y - lite_movie_df$rating.x)*1.00/lite_movie_df$std_rating
+
+head(lite_movie_df)
+```
+
+
+## Gemre
+
+```{r}
+#reduced the category to 1. Action 2. Thriller 3. Romance 4. Comedy 5. Fantasy
+
+#create slots for the predictors
+lite_movie_df['isAction'] = 0
+lite_movie_df['isComedy'] = 0
+lite_movie_df['isRomance'] = 0
+lite_movie_df['isThriller'] = 0
+lite_movie_df['isFantasy'] = 0
+
+#for loop to add more categorical variables
+for (i in 1:nrow(lite_movie_df)){
+  
+  if("Action" %in% lite_movie_df[[i,'genre']]){
+    lite_movie_df[i,'isAction'] = 1  
+  }
+
+  if("Comedy" %in% lite_movie_df[[i,'genre']]){
+    lite_movie_df[i,'isComedy'] = 1  
+  }
+
+  if("Romance" %in% lite_movie_df[[i,'genre']]){
+    lite_movie_df[i,'isRomance'] = 1  
+  }
+
+  if("Thriller" %in% lite_movie_df[[i,'genre']]){
+    lite_movie_df[i,'isThriller'] = 1  
+  }
+
+  if("Fantasy" %in% lite_movie_df[[i,'genre']]){
+    lite_movie_df[i,'isFantasy'] = 1
+  }
+}
+
+head(lite_movie_df)
+```
+
+
+
+##Review dates 
+
+Join two dataset via movie_id
+
+
+Took the difference between years because some dates are missing month, day variables.
+
+
+```{r}
+library(lubridate)
+
+#turn string yr to integer
+lite_movie_df["yr_review"] = strtoi(format(as.Date(lite_movie_df$review_date, format="%d %B %Y"), "%Y"))
+lite_movie_df["yr_release"] = strtoi(substr(lite_movie_df$"release_date",1,4))
+
+#store the result in time elapsed
+lite_movie_df["time_elapsed_yr"] = lite_movie_df["yr_review"] -(lite_movie_df["yr_release"])
+
+head(lite_movie_df)
+```
+
+# 3. User behavior (predictor 3,4 ): total number of reviews, repeat offender
+
+```{r}
+
+#match("ur22570173",lite_movie_df$user_id)
+
+library(dplyr)
+lite_movie_df["N"] = 1
+
+temp = lite_movie_df %>% select(user_id, is_spoiler, N) %>% group_by(user_id) %>% summarise(repeat_offender = max(is_spoiler), num_review = sum(N))
+
+## join with the existing column (added columns: repeat offender, number of reviews in the past)
+lite_movie_df = merge(x = lite_movie_df, y = temp, by = "user_id", all.x =T)
+
+head(lite_movie_df)
+```
+
+
+# 4. contains special character (predictor 5)
+
+```{r}
+library(stringr)
+
+#number of special chars
+lite_movie_df["special_char"] = str_count(lite_movie_df$review_text,"[^a-zA-Z0-9^ ^,^.]")
+head(lite_movie_df)
+```
+
+
+# 5. correct grammar checker (predictor 6) -- takes a long time
+## probably takes into account
+
+```{r}
+library(hunspell)
+
+hunspell_list = function(x){
+  x = length(hunspell(x)[[1]])
+  x
+}
+
+Error_Count= apply(lite_movie_df["review_text"], c(1,2), hunspell_list)
+
+```
+
+
+# 6. Run time (predictor 7) -- convert back to minute
+
+```{r}
+
+extract_time = function(x){
+  x = strsplit(x, "h |min")[[1]]
+  
+  if(length(x) > 1){
+    x = strtoi(x[1])*60 + strtoi(x[2])  
+  }
+  else{
+    x = strtoi(x[1])
+  }
+  x
+}
+
+# use the apply function to extract time 
+temp = apply(lite_movie_df["duration"], c(1,2), extract_time)
+lite_movie_df["duration_min"] = c(temp)
+head(lite_movie_df)
+```
+
+## Response Variable Boolean to Binary
+
+```{r}
+lite_movie_df$is_spoiler <- as.numeric(lite_movie_df$is_spoiler)
+head(lite_movie_df)
+```
+
+
+```{r}
+cols = c(colnames(lite_movie_df))
+write.table(lite_movie_df[,!cols %in% c("review_text","review_summary","plot_summary","plot_synopsis","genre")],
+            file = "lite_movie_df.tsv", sep = "\t", row.names = F)
+```
+
+
+
+
 ### Train / Test Split
 ```{r}
 # Test = False
 #details_partition_vec <- sample.split(IMDB_movie_details)
-review_partition_vec <- sample.split(IMDB_reviews$review_text, SplitRatio = 2/3)
+partition_vec <- sample.split(IMDB_reviews$review_text, SplitRatio = 2/3)
 review_train <- IMDB_reviews[review_partition_vec,]
 
 ```
 
 
-### Review Length
-```{r}
-review_length <- nchar(IMDB_reviews$review_text)
-```
+
+
 
 

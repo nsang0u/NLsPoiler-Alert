@@ -16,7 +16,7 @@ IMDB_reviews <- stream_in(file("IMDB_reviews.json"))
 
 ### Review Length
 ```{r}
-review_length <- nchar(IMDB_reviews$review_text)
+review_length <- nchar(mySplit(IMDB_reviews$review_text))
 ```
 
 
