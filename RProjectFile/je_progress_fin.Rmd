@@ -1,0 +1,205 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(jsonlite)
+IMDB_movie_details <- stream_in(file("IMDB_movie_details.json"))
+IMDB_reviews <- stream_in(file("IMDB_reviews.json"))
+```
+
+
+
+### 1. Genre (predictor 1)
+
+Difficulty: Movie data category has multiple genres (Action Thriller / Action / Action Comedy) etc
+
+```{r}
+#reduced the category to 1. Action 2. Thriller 3. Romance 4. Comedy 5. Fantasy
+
+#create slots for the predictors
+IMDB_movie_details['isAction'] = 0
+IMDB_movie_details['isComedy'] = 0
+IMDB_movie_details['isRomance'] = 0
+IMDB_movie_details['isThriller'] = 0
+IMDB_movie_details['isFantasy'] = 0
+
+
+#for loop to add more categorical variables
+for (i in 1:nrow(IMDB_movie_details)){
+  
+  if("Action" %in% IMDB_movie_details[[i,'genre']]){
+    IMDB_movie_details[i,'isAction'] = 1  
+  }
+
+  if("Comedy" %in% IMDB_movie_details[[i,'genre']]){
+    IMDB_movie_details[i,'isComedy'] = 1  
+  }
+
+  if("Romance" %in% IMDB_movie_details[[i,'genre']]){
+    IMDB_movie_details[i,'isRomance'] = 1  
+  }
+
+  if("Thriller" %in% IMDB_movie_details[[i,'genre']]){
+    IMDB_movie_details[i,'isThriller'] = 1  
+  }
+
+  if("Fantasy" %in% IMDB_movie_details[[i,'genre']]){
+    IMDB_movie_details[i,'isFantasy'] = 1
+  }
+}
+
+head(IMDB_movie_details)
+```
+
+
+# 2. Review dates (predictor 2)
+
+Join two dataset via movie_id
+
+```{r}
+movie_added_details = IMDB_movie_details[,c("movie_id","release_date","isComedy","isAction","isRomance","isThriller","isFantasy")]
+
+IMDB_reviews_big = merge(x = IMDB_reviews, y = movie_added_details, by = "movie_id", all.x =T)
+IMDB_reviews_big
+```
+
+And then now have review_date - review date.
+
+Took the difference between years because some dates are missing month, day variables.
+
+
+```{r}
+library(lubridate)
+
+#turn string yr to integer
+IMDB_reviews_big["yr_review"] = strtoi(format(as.Date(IMDB_reviews_big$review_date, format="%d %B %Y"), "%Y"))
+IMDB_reviews_big["yr_release"] = strtoi(substr(IMDB_reviews_big$"release_date",1,4))
+
+#store the result in time elapsed
+IMDB_reviews_big["time_elapsed_yr"] = IMDB_reviews_big["yr_review"] -(IMDB_reviews_big["yr_release"])
+
+head(IMDB_reviews_big)
+```
+
+
+# 3. User behavior (predictor 3,4 ): total number of reviews, repeat offender
+
+```{r}
+
+#match("ur22570173",IMDB_reviews_big$user_id)
+
+library(dplyr)
+IMDB_reviews_big["N"] = 1
+
+temp = IMDB_reviews_big %>% select(user_id, is_spoiler, N) %>% group_by(user_id) %>% summarise(repeat_offender = max(is_spoiler), num_review = sum(N))
+
+## join with the existing column (added columns: repeat offender, number of reviews in the past)
+IMDB_reviews_big = merge(x = IMDB_reviews_big, y = temp, by = "user_id", all.x =T)
+
+head(IMDB_reviews_big)
+```
+
+
+# 4. contains special character (predictor 5)
+
+```{r}
+library(stringr)
+
+#number of special chars
+IMDB_reviews_big["special_char"] = str_count(IMDB_reviews_big$review_text,"[^a-zA-Z0-9- ]")
+head(IMDB_reviews_big)
+```
+
+
+# 5. correct grammar checker (predictor 6) -- takes a long time
+## probably takes into account
+
+```{r}
+library(hunspell)
+
+hunspell_list = function(x){
+  x = hunspell(x)[[1]]
+  x
+}
+
+#chunk 1
+Temp1 = IMDB_reviews_big[1:10000,]
+Error_count1= apply(Temp1["review_text"], c(1,2), hunspell_list)
+
+#chunk 2
+Temp2 = IMDB_reviews_big[10001:20000,]
+Error_count2= apply(Temp2["review_text"], c(1,2), hunspell_list)
+
+#chunk 3
+Temp3 = IMDB_reviews_big[20001:30000,]
+Error_count3= apply(Temp3["review_text"], c(1,2), hunspell_list)
+
+#chunk 4
+Temp4 = IMDB_reviews_big[30001:40000,]
+Error_count4= apply(Temp4["review_text"], c(1,2), hunspell_list)
+
+#chunk 5
+Temp5 = IMDB_reviews_big[40001:50000,]
+Error_count5= apply(Temp5["review_text"], c(1,2), hunspell_list)
+
+#chunk 6
+
+BigTemp1 = IMDB_reviews_big[1:100000,] 
+Error_Count1= apply(BigTemp1["review_text"], c(1,2), hunspell_list)
+
+#IMDB_reviews_big["non_standard_engl"] = 0
+
+```
+
+
+# 6. Run time (predictor 7) -- convert back to minute
+
+```{r}
+
+extract_time = function(x){
+  x = strsplit(x, "h |min")[[1]]
+  
+  if(length(x) > 1){
+    x = strtoi(x[1])*60 + strtoi(x[2])  
+  }
+  else{
+    x = strtoi(x[1])
+  }
+  x
+}
+
+# use the apply function to extract time 
+temp = apply(IMDB_movie_details["duration"], c(1,2), extract_time)
+IMDB_movie_details["duration_min"] = c(temp)
+head(IMDB_movie_details)
+```
+
+
+# Readability
+```{r}
+```
+
+
+
+
+
+#other - frequency count
+```{r echo = F}
+library(dplyr)
+library(tidytext)
+
+test = IMDB_reviews
+
+movie_words = test %>% unnest_tokens(word, input = review_summary) %>% count(movie_id, word, sort = T)
+movie_words
+
+total_words = movie_words %>% group_by(movie_id) %>% summarize(total = sum(n))
+
+movie_words = left_join(book_words, total_words)
+movie_words
+```
+
+
