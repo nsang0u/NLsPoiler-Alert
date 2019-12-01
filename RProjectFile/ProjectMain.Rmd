@@ -44,9 +44,20 @@ mySplit <- function(string){
 
 ### 1. Review Length
 ```{r}
-review_length <- length(mySplit(IMDB_reviews$review_text))
-head(review_length)
+# review_length <- length(mySplit(IMDB_reviews$review_text))
+# head(review_length)
+length_split_wrapper = function(x){
+  length(mySplit(x))
+}
+lite_movie_df$review_length <- c(apply(lite_movie_df["review_text"], c(1,2), length_split_wrapper))
 ```
+
+## SynopsisReviewOverlap
+```{r}
+overlapRatioResult <- getOverlapMetric(lite_movie_df)
+lite_movie_df$SynopsisReviewOverlap <- overlapRatioResult
+```
+
 
 ### 2. Rating
 ```{r}

@@ -14,6 +14,14 @@ IMDB_reviews <- stream_in(file("IMDB_reviews.json"))
 ```
 
 
+```{r}
+# Test = False
+#details_partition_vec <- sample.split(IMDB_movie_details)
+partition_vec <- sample.split(IMDB_reviews$review_text, SplitRatio = 2/3)
+review_train <- IMDB_reviews[partition_vec,]
+
+```
+
 ### Review Length
 ```{r}
 review_length <- nchar(mySplit(IMDB_reviews$review_text))
@@ -62,9 +70,9 @@ getOverlapMetric <- function(review_df){
   review_split <- unique(mySplit(review_text))
   summary_split <- unique(mySplit(summary_text))
   
-  View(synopsis_split)
-  View(review_split)
-  View(summary_split)
+  # View(synopsis_split)
+  # View(review_split)
+  # View(summary_split)
   
   # match review text to synopsis text
   #nmatch <- sum(nchar(amatch(review_split, synopsis_split, method = "lv", maxDist = 1)), na.rm = TRUE)
@@ -85,11 +93,16 @@ getOverlapMetric <- function(review_df){
   return(overlapMetric)
 }
 
-overlapRatioResult100 <- getOverlapMetric(review_train[1:100,])
+overlapRatioResult100 <- getOverlapMetric(lite_movie_df[1:100,])
 View(overlapRatioResult100)
 
 # overlapMetricResult100 <- getOverlapMetric(review_train[1:10000,])
 # View(overlapMetricResult100)
+
+overlapRatioResult <- getOverlapMetric(lite_movie_df)
+View(overlapRatioResult)
+
+write.table(overlapRatioResult, file = "overlapRatioResult.tsv", sep = "\t", row.names = F)
 
 testReview_split <- mySplit(review_train$review_summary[1])
 testMovie <- getMovie("tt0111161")
@@ -97,32 +110,4 @@ testSynopsis_split <- mySplit(testMovie$plot_synopsis)
 testSummary_split <- mySplit(testMovie$plot_summary)
 
 View(amatch(testSynopsis_split, testSummary_split, method = "lv", maxDist = 1))
-
-# overlapMetric <- rep(NULL, nrow(review_train))
-# for (i in seq(1:nrow(review_train))){
-#   # get synopsis from movie_details
-#   movie_id <- review_train[i]$movie_id
-#   print(movie_id)
-#   movie <- getMovie(movie_id)
-#   synopsis_text <- movie$plot_synopsis
-#   
-#   # get review text
-#   review_text <- review_train$review_text[i]
-#   
-#   #split texts 
-#   synopsis_split <- mySplit(synopsis_text)
-#   review_split <- mySplit(review_text)
-#   
-# 
-#   # match review text to synopsis text
-#   nmatch <- sum(nchar(amatch(review_split, synopsis_split, method = "lv", maxDist = 1)), na.rm = TRUE)
-#   
-# }
 ```
-
-
-### Splitting Dataset
-```{r}
-
-```
-
