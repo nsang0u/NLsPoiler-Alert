@@ -1,0 +1,66 @@
+---
+title: "ProjectAnalysis"
+output: html_document
+---
+
+
+## Exploratory Data Analysis
+
+```{r}
+group_0 = lite_movie_df[which(lite_movie_df$is_spoiler == 0),]
+group_1 = lite_movie_df[which(lite_movie_df$is_spoiler == 1),]
+barplot(c(nrow(group_0),nrow(group_1)))
+```
+
+
+
+
+## Sentiment analysis
+
+```{r}
+library(tidytext)
+library(stringr)
+library(textdata)
+
+test = lite_movie_df
+movie_words = test %>% unnest_tokens(word, input = review_summary) %>% count(movie_id, user_id, word, sort = T)
+movie_words
+#lite_movie_df >%> group_by("movie_id") %>% 
+
+#sentiment analysis here 
+review_words = lite_movie_df %>% mutate(linenumber = row_number()) %>% unnest_tokens(word, input = review_summary)
+head(review_words)
+review_words_spoil = review_words %>% filter(is_spoiler == 1) %>% inner_join(nrc_joy) %>% count(word, sort = T)
+review_words_Notspoil = review_words %>% filter(is_spoiler == 0) %>% inner_join(nrc_joy) %>% count(word, sort = T)
+
+
+nrc_joy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+nrc_surprise <- get_sentiments("nrc") %>% 
+  filter(sentiment == "surprise")
+
+temp_sentiment = review_words %>% 
+  inner_join(nrc_surprise) %>%
+  count(linenumber, index = linenumber%/%80, sentiment)
+temp_sentiment
+
+temp_sentiment_2 = review_words %>% 
+  inner_join(get_sentiments("afinn")) %>%
+  group_by(index = linenumber%/%80) %>%
+  summarise(sentiment = sum(value)) %>%
+  mutate(method = "AFINN")
+
+temp_fin <- bind_rows(review_words %>% 
+  inner_join(get_sentiments("bing")) %>%
+  mutate(method = "Bing et al."),
+  review_words %>%
+    inner_join(get_sentiments("nrc")) %>%
+    filter(sentiment %in% c("positve","negative")) %>% 
+    mutate(method = "NRC") %>%
+    count(method, index = linenumber%/%80, sentiment))
+
+head(temp_fin)
+```
+
+
