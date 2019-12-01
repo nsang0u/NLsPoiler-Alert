@@ -4,63 +4,282 @@ output: html_document
 ---
 
 
-## Exploratory Data Analysis
-
 ```{r}
-group_0 = lite_movie_df[which(lite_movie_df$is_spoiler == 0),]
-group_1 = lite_movie_df[which(lite_movie_df$is_spoiler == 1),]
-barplot(c(nrow(group_0),nrow(group_1)))
+library(jsonlite)
+library(stringdist)
+library(caTools)
+df_lite = read.delim("lite_movie_df_2.tsv")
+df_reviews = stream_in(file("IMDB_reviews.json"))
+head(df_lite)
 ```
 
 
-
-
-## Sentiment analysis
+## Part 1: Sentiment analysis
 
 ```{r}
 library(tidytext)
 library(stringr)
 library(textdata)
+library(dplyr)
 
-test = lite_movie_df
-movie_words = test %>% unnest_tokens(word, input = review_summary) %>% count(movie_id, user_id, word, sort = T)
-movie_words
-#lite_movie_df >%> group_by("movie_id") %>% 
+#join the most updated version of df with the review_text
+df_lite_review <- merge(x = df_lite, y = df_reviews[,c("movie_id","user_id","review_text")], by = c("movie_id", "user_id"))
 
-#sentiment analysis here 
-review_words = lite_movie_df %>% mutate(linenumber = row_number()) %>% unnest_tokens(word, input = review_summary)
-head(review_words)
-review_words_spoil = review_words %>% filter(is_spoiler == 1) %>% inner_join(nrc_joy) %>% count(word, sort = T)
-review_words_Notspoil = review_words %>% filter(is_spoiler == 0) %>% inner_join(nrc_joy) %>% count(word, sort = T)
+#unnest all review words
+review_words = df_lite_review %>% unnest_tokens(word, input = review_text)
 
-
-nrc_joy <- get_sentiments("nrc") %>% 
-  filter(sentiment == "joy")
-
-nrc_surprise <- get_sentiments("nrc") %>% 
-  filter(sentiment == "surprise")
-
-temp_sentiment = review_words %>% 
-  inner_join(nrc_surprise) %>%
-  count(linenumber, index = linenumber%/%80, sentiment)
-temp_sentiment
-
-temp_sentiment_2 = review_words %>% 
-  inner_join(get_sentiments("afinn")) %>%
-  group_by(index = linenumber%/%80) %>%
-  summarise(sentiment = sum(value)) %>%
-  mutate(method = "AFINN")
-
-temp_fin <- bind_rows(review_words %>% 
-  inner_join(get_sentiments("bing")) %>%
-  mutate(method = "Bing et al."),
-  review_words %>%
-    inner_join(get_sentiments("nrc")) %>%
-    filter(sentiment %in% c("positve","negative")) %>% 
-    mutate(method = "NRC") %>%
-    count(method, index = linenumber%/%80, sentiment))
-
-head(temp_fin)
+#count the number of words
+wordcounts = review_words %>% group_by(movie_id, user_id) %>% summarize(words = n())
 ```
+
+
+
+```{r}
+#extract negative & positive & surprise words
+bingnegative <- get_sentiments("bing") %>% filter(sentiment == "negative")
+bingpositive <- get_sentiments("bing") %>% filter(sentiment == "positive")
+nrc_surprise <- get_sentiments("nrc") %>% filter(sentiment == "surprise")
+
+#extract sentiment scores
+sentiment_df_neg <- review_words %>%
+  semi_join(bingnegative) %>%
+  group_by(movie_id, user_id) %>%
+  summarize(negativewords = n()) %>%
+  left_join(wordcounts, by = c("movie_id","user_id")) %>%
+  mutate(negratio = negativewords/words) %>% ungroup()
+
+sentiment_df_pos <- review_words %>%
+  semi_join(bingpositive) %>%
+  group_by(movie_id, user_id) %>%
+  summarize(positivewords = n()) %>%
+  left_join(wordcounts, by = c("movie_id","user_id")) %>%
+  mutate(posratio = positivewords/words) %>% ungroup()
+
+sentiment_df_surprise <- review_words %>%
+  semi_join(nrc_surprise) %>%
+  group_by(movie_id, user_id) %>%
+  summarize(surprisewords = n()) %>%
+  left_join(wordcounts, by = c("movie_id","user_id")) %>%
+  mutate(surpriseratio = surprisewords/words) %>% ungroup()
+
+```
+
+```{r}
+tail(sentiment_df_surprise)
+tail(sentiment_df_neg)
+tail(sentiment_df_surprise)
+```
+
+
+```{r}
+
+#join back to the original df_lite
+df_lite = merge(x = df_lite, y = sentiment_df_neg[,c("movie_id","user_id","negratio")], by = c("movie_id", "user_id"),
+      all.x = T)
+df_lite = merge(x = df_lite, y = sentiment_df_pos[,c("movie_id","user_id","posratio")], by = c("movie_id", "user_id"),
+      all.x = T)
+df_lite = merge(x = df_lite, y = sentiment_df_surprise[,c("movie_id","user_id","surpriseratio")], by = c("movie_id", "user_id"),
+      all.x = T)
+```
+
+## change the repeat_offender flag
+
+
+```{r}
+temp = df_lite %>% select(user_id, is_spoiler, N) %>% group_by(user_id) %>% summarise(repeat_offender = (sum(is_spoiler) > 1), num_review = sum(N))
+
+
+#update the repeat_offender flag
+df_fin = merge(x = df_lite[,!names(df_lite) %in% c("repeat_offender","num_review")], y = temp, by = "user_id", all.x =T)
+
+```
+
+## write to a new df
+```{r}
+write.table(df_fin, file = "lite_movie_df_update.tsv", sep = "\t", row.names = F)
+```
+
+
+## wordcloud image for spoiler / nonspoiler
+
+```{r}
+library(wordcloud)
+#overall words included in the review_words
+review_words %>% anti_join(stop_words) %>% count(word) %>% with(wordcloud(word, n, max.words = 100))
+
+#words included in the is_spoiler == 0
+review_words[which(review_words$is_spoiler == 0),] %>% anti_join(stop_words) %>% count(word) %>% with(wordcloud(word, n, max.words = 100))
+
+#words included in the is_spoiler == 1
+review_words[which(review_words$is_spoiler == 1),] %>% anti_join(stop_words) %>% count(word) %>% with(wordcloud(word, n, max.words = 100))
+```
+
+
+
+
+## Part 2: Exploratory Data Analysis
+
+
+```{r}
+df_fin = read.delim("lite_movie_df_update.tsv")
+head(df_fin)
+```
+
+### unbalanced
+```{r}
+library(ggplot2)
+group_0 = df_fin[which(df_fin$is_spoiler == 0),]
+group_1 = df_fin[which(df_fin$is_spoiler == 1),]
+
+barplot(c(nrow(group_0),nrow(group_1)), col="orange",
+        names.arg=c("True","False"),
+        xlab = "is_spoiler",
+        ylab = "frequency",
+        main = "Ratio of Response Variable (is_spoiler = T/F)",
+        cex.main = 1.2)
+```
+
+
+
+### genre spoiler/not spoiler ratio
+```{r}
+par(mfrow=c(1,4))
+
+g1 = df_fin[which(df_fin$isAction == 1),]
+g2 = df_fin[which(df_fin$isComedy == 1),]
+g3 = df_fin[which(df_fin$isRomance == 1),]
+g4 = df_fin[which(df_fin$isThriller == 1),]
+g5 = df_fin[which(df_fin$isFantasy == 1),]
+
+check_ratio = function(x){
+  group0 = x[which(x$is_spoiler == 0),]
+  group1 = x[which(x$is_spoiler == 1),]
+  c(nrow(group0),nrow(group1))
+}
+
+df_ratio = data.frame(action_ratio = check_ratio(g1), 
+           comedy_ratio = check_ratio(g2),
+           romance_ratio = check_ratio(g3),
+           thriller_ratio = check_ratio(g4),
+           fantasy_ratio = check_ratio(g5)
+           )
+```
+
+
+
+```{r}
+barplot(as.matrix(df_ratio),beside = T,
+        xlab = "is_spoiler",
+        ylab = "frequency",
+        main = "Ratio of Response Variable (is_spoiler = T/F)",
+       col=c("#7BD9A5","#D97BAA"), #names.arg=c("True","False"),
+      cex.main = 1.2)
+legend("topright",
+       c("is_spoiler = False","is_spoiler = True"),
+       fill = c("#7BD9A5","#D97BAA")
+       )
+```
+
+
+### repeat_offender ratio
+
+
+```{r}
+par(mfrow=c(1,2))
+
+SpoilRepeatT = nrow(subset(df_fin, is_spoiler ==1 & repeat_offender==TRUE))
+SpoilRepeatF = nrow(subset(df_fin, is_spoiler ==1 & repeat_offender==FALSE))
+
+NSpoilRepeatT = nrow(subset(df_fin, is_spoiler ==0 & repeat_offender==TRUE))
+NSpoilRepeatF = nrow(subset(df_fin, is_spoiler ==0 & repeat_offender==FALSE))
+
+
+barplot(c(SpoilRepeatT, SpoilRepeatF),
+        xlab = "Repeat offender",
+        ylab = "frequency",
+        ylim = c(0,100000),
+        main = "Ratio of Repeat Offender for is_spoiler = TRUE",
+       col=c("#7BD9A5","#D97BAA"), names.arg=c("True","False"),
+      cex.main = 0.8)
+
+barplot(c(NSpoilRepeatT, NSpoilRepeatF),
+        ylim = c(0,100000),
+        xlab = "Repeat offender",
+        ylab = "frequency",
+        main = "Ratio of Repeat Offender for is_spoiler = FALSE",
+       col=c("#7BD9A5","#D97BAA"), names.arg=c("True","False"),
+      cex.main = 0.8)
+```
+
+
+```{r}
+head(df_fin)
+```
+
+
+### Distribution time_elapsed_yr, yr_release, yr_review, rating.x, duration,  
+
+```{r}
+par(mfrow=c(3,4))
+
+#time passed
+with(df_fin,hist(time_elapsed_yr,col="lightblue",main="",nclass=10,cex=2.2,ps=30,cex.sub=2))
+with(df_fin,hist(yr_release,col="lightblue",main="",nclass=10,cex=2.2,ps=30,cex.sub=2))
+with(df_fin,hist(yr_review,col="lightblue",main="",nclass=10,cex=2.2,ps=30,cex.sub=2))
+
+#num reviews
+with(df_fin,hist(num_review,col="lightblue",main="",nclass=10,cex=1.2))
+
+#sentiments
+with(df_fin,hist(surpriseratio.x,col="lightblue",main="",nclass=10,cex=1.2))
+with(df_fin,hist(posratio,col="lightblue",main="",nclass=10,cex=1.2))
+with(df_fin,hist(negratio,col="lightblue",main="",nclass=10,cex=1.2))
+
+#number of matches
+with(df_fin,hist(SynopsisReviewOverlap,col="lightblue",main="",nclass=10,cex=1.2))
+
+#rating (individual)
+with(df_fin,hist(rating.x,col="lightblue",main="",nclass=10,cex=1.2))
+
+#duration
+with(df_fin,hist(duration_min,col="lightblue",main="",nclass=10,cex=1.2))
+
+```
+
+
+
+### correlation between is_spoiler and other numerical variables
+
+1. time_elapsed 2. yr_release 3. yr_review 4. rating.x (individual) 5. duration (min) 
+6. repeat_offender 7. num_review 8. special character 9. z_score 10. review_length 11. synopsis review
+12. sentiment ratios 
+
+
+### Running logistic regression
+
+
+The most basic model:
+
+```{r}
+lm.basic = glm(is_spoiler ~ rating.x + isAction + isComedy + isRomance + isThriller + 
+      isFantasy + yr_review + yr_release + time_elapsed_yr + special_char + 
+      duration_min + z_score + review_length + SynopsisReviewOverlap + negratio +
+      posratio + surpriseratio.x + repeat_offender + num_review, 
+      data = df_fin, family = "binomial")
+summary(basic_model)
+```
+
+
+**HERE**
+
+
+### Full model (with iteraction terms), AIC, BIC
+
+```{r}
+lm.step = step(lm.basic, trace = 0)
+summary(lm.step)
+```
+
+
 
 
