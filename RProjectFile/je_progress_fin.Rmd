@@ -10,7 +10,12 @@ IMDB_movie_details <- stream_in(file("IMDB_movie_details.json"))
 IMDB_reviews <- stream_in(file("IMDB_reviews.json"))
 ```
 
+Test
+```{r}
+columns = c("movie_id","rating","release_date")
+IMDB_movie_details[1:400,!names(IMDB_movie_details) %in% c("genre","rating")]
 
+```
 
 ### 1. Genre (predictor 1)
 
@@ -181,8 +186,6 @@ head(IMDB_movie_details)
 # Readability
 ```{r}
 ```
-
-
 
 
 

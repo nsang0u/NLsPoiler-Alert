@@ -20,34 +20,47 @@ head(IMDB_movie_details)
 head(IMDB_reviews)
 ```
 
-### Data Grooming
+## Data Grooming
 
-## Size reduction
+### Size reduction
 ```{r}
 lite_movie_details <- na.omit(IMDB_movie_details[IMDB_movie_details$plot_synopsis != "",])[1:400,]
 lite_movie_df <- merge(x = IMDB_reviews, y = lite_movie_details, by = "movie_id")
+```
 
+
+## Function Used:
+
+### MySplit function
+```{r}
+mySplit <- function(string){
+  unlist(strsplit(string, split = "[\\.\\,\\!\\?] |[[:space:]]| '|' |.$"))
+}
 ```
 
 
 
-### PREDICTORS:
+## PREDICTORS:
 
-## Review Length
+### 1. Review Length
 ```{r}
 review_length <- length(mySplit(IMDB_reviews$review_text))
+head(review_length)
 ```
 
-## Rating
+### 2. Rating
 ```{r}
 lite_movie_details$rating <- as.double(lite_movie_details$rating)
 lite_movie_df$rating.y <- as.double(lite_movie_df$rating.y)
 lite_movie_df$rating.x <- as.double(lite_movie_df$rating.x)
 ```
 
-## Mean Rating 
+### 3. Mean Rating (z_score)
 
 ```{r}
+library(dplyr)
+lite_movie_df["N"] = 1
+
 temp_std = lite_movie_df %>% select(movie_id, rating.x) %>% group_by(movie_id) %>% summarise(std_rating = sd(rating.x))
 
 lite_movie_df <- merge(x = lite_movie_df, y = temp_std, by = "movie_id", all.x = T)
@@ -58,7 +71,7 @@ head(lite_movie_df)
 ```
 
 
-## Gemre
+### 4. Genre
 
 ```{r}
 #reduced the category to 1. Action 2. Thriller 3. Romance 4. Comedy 5. Fantasy
@@ -99,13 +112,11 @@ head(lite_movie_df)
 
 
 
-##Review dates 
+### 5. Review dates 
 
 Join two dataset via movie_id
 
-
 Took the difference between years because some dates are missing month, day variables.
-
 
 ```{r}
 library(lubridate)
@@ -120,14 +131,9 @@ lite_movie_df["time_elapsed_yr"] = lite_movie_df["yr_review"] -(lite_movie_df["y
 head(lite_movie_df)
 ```
 
-# 3. User behavior (predictor 3,4 ): total number of reviews, repeat offender
+### 6. User behavior: total number of reviews, repeat offender
 
 ```{r}
-
-#match("ur22570173",lite_movie_df$user_id)
-
-library(dplyr)
-lite_movie_df["N"] = 1
 
 temp = lite_movie_df %>% select(user_id, is_spoiler, N) %>% group_by(user_id) %>% summarise(repeat_offender = max(is_spoiler), num_review = sum(N))
 
@@ -138,7 +144,7 @@ head(lite_movie_df)
 ```
 
 
-# 4. contains special character (predictor 5)
+### 7. contains special character
 
 ```{r}
 library(stringr)
@@ -149,23 +155,7 @@ head(lite_movie_df)
 ```
 
 
-# 5. correct grammar checker (predictor 6) -- takes a long time
-## probably takes into account
-
-```{r}
-library(hunspell)
-
-hunspell_list = function(x){
-  x = length(hunspell(x)[[1]])
-  x
-}
-
-Error_Count= apply(lite_movie_df["review_text"], c(1,2), hunspell_list)
-
-```
-
-
-# 6. Run time (predictor 7) -- convert back to minute
+### 8. Run time: convert back to minute
 
 ```{r}
 
@@ -187,6 +177,26 @@ lite_movie_df["duration_min"] = c(temp)
 head(lite_movie_df)
 ```
 
+
+## correct grammar checker -- takes a long time
+## probably takes into account
+
+```{r}
+library(hunspell)
+
+hunspell_list = function(x){
+  x = length(hunspell(x)[[1]])
+  x
+}
+
+#Error_Count = apply(lite_movie_df["review_text"], c(1,2), hunspell_list)
+
+error_count = (lite_movie_df$review_text) %>% hunspell_list()
+
+```
+
+
+
 ## Response Variable Boolean to Binary
 
 ```{r}
@@ -195,13 +205,13 @@ head(lite_movie_df)
 ```
 
 
+## write to table for analysis in JMP
+
 ```{r}
 cols = c(colnames(lite_movie_df))
 write.table(lite_movie_df[,!cols %in% c("review_text","review_summary","plot_summary","plot_synopsis","genre")],
             file = "lite_movie_df.tsv", sep = "\t", row.names = F)
 ```
-
-
 
 
 ### Train / Test Split
@@ -212,9 +222,5 @@ partition_vec <- sample.split(IMDB_reviews$review_text, SplitRatio = 2/3)
 review_train <- IMDB_reviews[review_partition_vec,]
 
 ```
-
-
-
-
 
 
