@@ -8,6 +8,8 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(jsonlite)
+library(stringdist)
+library(caTools)
 IMDB_movie_details <- stream_in(file("IMDB_movie_details.json"))
 IMDB_reviews <- stream_in(file("IMDB_reviews.json"))
 ```
@@ -18,33 +20,19 @@ head(IMDB_movie_details)
 head(IMDB_reviews)
 ```
 
+### Train / Test Split
+```{r}
+# Test = False
+#details_partition_vec <- sample.split(IMDB_movie_details)
+review_partition_vec <- sample.split(IMDB_reviews$review_text, SplitRatio = 2/3)
+review_train <- IMDB_reviews[review_partition_vec,]
+
+```
 
 
 ### Review Length
 ```{r}
 review_length <- nchar(IMDB_reviews$review_text)
-```
-
-
-
-
-### 2-c. Frequency
-
-
-```{r echo = F}
-library(dplyr)
-library(tidytext)
-
-test = IMDB_reviews
-
-movie_words = test %>% unnest_tokens(word, input = review_summary) %>% count(movie_id, word, sort = T)
-
-movie_words
-
-total_words = movie_words %>% group_by(movie_id) %>% summarize(total = sum(n))
-
-movie_words = left_join(book_words, total_words)
-movie_words
 ```
 
 

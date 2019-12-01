@@ -1,0 +1,128 @@
+---
+title: "Noah_work"
+author: "Noah Nsangou"
+date: "11/29/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(jsonlite)
+library(stringdist)
+IMDB_movie_details <- stream_in(file("IMDB_movie_details.json"))
+IMDB_reviews <- stream_in(file("IMDB_reviews.json"))
+```
+
+
+### Review Length
+```{r}
+review_length <- nchar(IMDB_reviews$review_text)
+```
+
+
+### Synopsis - Review Word Non-Overlap: Words only in synopsis
+
+# MySplit function
+```{r}
+mySplit <- function(string){
+  unlist(strsplit(string, split = "[\\.\\,\\!\\?] |[[:space:]]| '|' |.$"))
+}
+```
+
+# getMovie function
+```{r}
+getMovie <- function(id){
+  IMDB_movie_details[IMDB_movie_details$movie_id == id,]
+}
+```
+
+
+```{r}
+split_review_text <- mySplit((IMDB_reviews[review_partition_vec])$review_text)
+
+amatch("Hello", c("Hello", "Hellofor"))
+```
+# Getting metric
+```{r}
+getOverlapMetric <- function(review_df){
+  overlapMetric <- rep(NULL, nrow(review_train))
+  for (i in seq(1:nrow(review_df))){
+  # get synopsis from movie_details
+  movie_id <- review_df$movie_id[i]
+  #print(movie_id)
+  movie <- getMovie(movie_id)
+  synopsis_text <- tolower(movie$plot_synopsis)
+  summary_text <- tolower(movie$plot_summary)
+  
+  # get review text
+  review_text <- tolower(review_df$review_text[i])
+  
+  #split texts 
+  synopsis_split <- unique(mySplit(synopsis_text))
+  review_split <- unique(mySplit(review_text))
+  summary_split <- unique(mySplit(summary_text))
+  
+  View(synopsis_split)
+  View(review_split)
+  View(summary_split)
+  
+  # match review text to synopsis text
+  #nmatch <- sum(nchar(amatch(review_split, synopsis_split, method = "lv", maxDist = 1)), na.rm = TRUE)
+
+  syn_sum_match <- amatch(synopsis_split, summary_split, method = "lv", maxDist = .5)
+  #View(syn_sum_match)
+  syn_non_matched <- synopsis_split[is.na(syn_sum_match)]
+  #View(syn_non_matched)
+  
+  review_match <- amatch(review_split, syn_non_matched, method="lv", maxDist = 1)
+  #View(review_match)
+  
+  nmatch <- sum(!is.na(review_match)) # how many are not NA? = noverlap btw review and synopsis-unique words
+  matchRatio <- nmatch / length(review_split)
+  
+  overlapMetric[i] <- matchRatio #amatch(review_split, synopsis_split, method = "lv", maxDist = 1)
+  }
+  return(overlapMetric)
+}
+
+overlapRatioResult100 <- getOverlapMetric(review_train[1:100,])
+View(overlapRatioResult100)
+
+# overlapMetricResult100 <- getOverlapMetric(review_train[1:10000,])
+# View(overlapMetricResult100)
+
+testReview_split <- mySplit(review_train$review_summary[1])
+testMovie <- getMovie("tt0111161")
+testSynopsis_split <- mySplit(testMovie$plot_synopsis)
+testSummary_split <- mySplit(testMovie$plot_summary)
+
+View(amatch(testSynopsis_split, testSummary_split, method = "lv", maxDist = 1))
+
+# overlapMetric <- rep(NULL, nrow(review_train))
+# for (i in seq(1:nrow(review_train))){
+#   # get synopsis from movie_details
+#   movie_id <- review_train[i]$movie_id
+#   print(movie_id)
+#   movie <- getMovie(movie_id)
+#   synopsis_text <- movie$plot_synopsis
+#   
+#   # get review text
+#   review_text <- review_train$review_text[i]
+#   
+#   #split texts 
+#   synopsis_split <- mySplit(synopsis_text)
+#   review_split <- mySplit(review_text)
+#   
+# 
+#   # match review text to synopsis text
+#   nmatch <- sum(nchar(amatch(review_split, synopsis_split, method = "lv", maxDist = 1)), na.rm = TRUE)
+#   
+# }
+```
+
+
+### Splitting Dataset
+```{r}
+
+```
+
